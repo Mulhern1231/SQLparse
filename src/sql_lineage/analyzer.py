@@ -56,7 +56,7 @@ def _analyze_select(select: exp.Select, dialect: str) -> Dict[str, object]:
         lineage_expression = (
             select_expr.this if isinstance(select_expr, exp.Alias) else select_expr
         )
-        functions = extract_functions(lineage_expression)
+        functions = extract_functions(lineage_expression, dialect)
         lineage_type, mapping_reason = determine_lineage_type(select_expr, functions)
         lineage = extract_lineage_data(
             lineage_expression, name, context, lineage_type, mapping_reason

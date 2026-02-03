@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Dict, List, Tuple
+from typing import Dict, List, Tuple, Set
 
 from sqlglot import exp
 
@@ -42,7 +42,7 @@ def _collect_cte_sources(
     sources: List[SourceInfo] = []
     report_sources: List[SourceInfo] = []
     cte_sources: Dict[str, SourceInfo] = {}
-    with_clause = select.args.get("with")
+    with_clause = select.args.get("with") or select.args.get("with_")
     if not isinstance(with_clause, exp.With):
         return sources, report_sources
     for cte in with_clause.expressions:
@@ -97,18 +97,29 @@ def _collect_subquery_sources(
     return sources, report_sources
 
 
-def _collect_immediate_tables(select: exp.Select) -> List[SourceInfo]:
+def _collect_immediate_tables(
+    select: exp.Select, skip_names: Set[str] | None = None
+) -> List[SourceInfo]:
     """Collect tables referenced directly in FROM/JOIN clauses."""
 
     sources: List[SourceInfo] = []
-    from_clause = select.args.get("from")
+    skip_names = skip_names or set()
+    from_clause = select.args.get("from") or select.args.get("from_")
     if isinstance(from_clause, exp.From):
-        for expression in from_clause.expressions:
+        if isinstance(getattr(from_clause, "this", None), exp.Table):
+            table = build_source_info_from_table(from_clause.this)
+            if table.identifier() not in skip_names:
+                sources.append(table)
+        for expression in getattr(from_clause, "expressions", []) or []:
             if isinstance(expression, exp.Table):
-                sources.append(build_source_info_from_table(expression))
+                table = build_source_info_from_table(expression)
+                if table.identifier() not in skip_names:
+                    sources.append(table)
     for join in select.args.get("joins", []) or []:
         if isinstance(join.this, exp.Table):
-            sources.append(build_source_info_from_table(join.this))
+            table = build_source_info_from_table(join.this)
+            if table.identifier() not in skip_names:
+                sources.append(table)
     return sources
 
 
@@ -127,10 +138,21 @@ def build_context(
     )
     sources.extend(subquery_sources)
     report_sources.extend(subquery_reports)
+    cte_map = {src.identifier(): src for src in cte_sources}
     immediate_tables = _collect_immediate_tables(select)
-    sources.extend(immediate_tables)
-    report_sources.extend(immediate_tables)
+    active_identifiers: List[str] = []
+    for table in immediate_tables:
+        ident = table.identifier()
+        active_identifiers.append(ident)
+        if ident in cte_map:
+            sources.append(cte_map[ident])
+            report_sources.append(cte_map[ident])
+        else:
+            sources.append(table)
+            report_sources.append(table)
     return AnalysisContext(
         sources=merge_sources(sources),
         report_sources=merge_sources(report_sources),
+        dialect=dialect,
+        active_identifiers=active_identifiers,
     )

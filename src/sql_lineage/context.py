@@ -32,6 +32,8 @@ class AnalysisContext:
 
     sources: List[SourceInfo]
     report_sources: List[SourceInfo]
+    dialect: str
+    active_identifiers: List[str]
 
     def resolve_source(self, name: str) -> Optional[SourceInfo]:
         """Resolve a source by alias or name."""
@@ -44,12 +46,21 @@ class AnalysisContext:
     def candidate_sources(self) -> List[SourceInfo]:
         """Return sources that can satisfy unqualified columns."""
 
+        # Prefer relations that are active in the current FROM/JOIN scope.
+        scoped = [
+            source
+            for source in self.sources
+            if source.identifier() in set(self.active_identifiers)
+        ]
+        if len(scoped) == 1:
+            return scoped
+
         non_cte_sources = [
-            source for source in self.sources if source.source_type != "cte"
+            source for source in (scoped or self.sources) if source.source_type != "cte"
         ]
         if non_cte_sources:
             return non_cte_sources
-        return list(self.sources)
+        return list(scoped or self.sources)
 
     def resolve_unqualified_column(self) -> Optional[SourceInfo]:
         """Resolve an unqualified column if there is a single candidate source."""
