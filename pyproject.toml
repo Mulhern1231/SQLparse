@@ -1,0 +1,29 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "sql-lineage"
+version = "0.1.0"
+description = "SQL column lineage analyzer"
+readme = "README.md"
+requires-python = ">=3.9"
+license = { text = "MIT" }
+authors = [{ name = "SQL Lineage" }]
+dependencies = ["sqlglot>=23.0.0"]
+
+[project.optional-dependencies]
+dev = ["pytest", "black"]
+
+[project.scripts]
+sql-lineage = "sql_lineage.cli:main"
+
+[tool.black]
+line-length = 88
+
+target-version = ["py39"]
+
+[tool.pytest.ini_options]
+addopts = "-ra"
+testpaths = ["tests"]
+pythonpath = ["src"]
