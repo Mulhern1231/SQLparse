@@ -2,27 +2,50 @@
 
 from __future__ import annotations
 
-from typing import Optional
+from dataclasses import dataclass
+from typing import List, Optional, Tuple
 
-from sqlglot import exp, parse_one
-
-
-class ParseResult:
-    """Container for parsed SQL metadata."""
-
-    def __init__(self, expression: exp.Expression, target: Optional[exp.Table]) -> None:
-        self.expression = expression
-        self.target = target
+from sqlglot import exp, parse
 
 
-def parse_sql(sql: str, dialect: str) -> ParseResult:
-    """Parse SQL into an AST and extract the target table if present."""
+@dataclass(frozen=True)
+class StatementParseResult:
+    """Parsed SQL statement metadata."""
 
-    expression = parse_one(sql, read=dialect)
+    expression: exp.Expression
+    target: Optional[exp.Table]
+    statement_type: str
+
+
+def _statement_type(expression: exp.Expression) -> str:
+    """Determine a statement type string for an expression."""
+
     if isinstance(expression, exp.Create):
-        target = expression.this if isinstance(expression.this, exp.Table) else None
-        query = expression.expression
-        if query is None:
-            return ParseResult(expression, target)
-        return ParseResult(query, target)
-    return ParseResult(expression, None)
+        if expression.args.get("expression") is not None:
+            return "create_table_as"
+        return "create_table"
+    if isinstance(expression, exp.Select):
+        return "select"
+    if isinstance(expression, exp.Union):
+        return "union"
+    return expression.key.lower()
+
+
+def parse_sql(sql: str, dialect: str) -> List[StatementParseResult]:
+    """Parse SQL into AST statements and extract metadata."""
+
+    expressions = parse(sql, read=dialect)
+    statements: List[StatementParseResult] = []
+    for expression in expressions:
+        target: Optional[exp.Table] = None
+        if isinstance(expression, exp.Create):
+            if isinstance(expression.this, exp.Table):
+                target = expression.this
+        statements.append(
+            StatementParseResult(
+                expression=expression,
+                target=target,
+                statement_type=_statement_type(expression),
+            )
+        )
+    return statements

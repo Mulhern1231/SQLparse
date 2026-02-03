@@ -2,38 +2,9 @@
 
 from __future__ import annotations
 
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional
 
 from sqlglot import exp
-
-
-def table_identifier(table: exp.Table) -> Dict[str, str]:
-    """Build a table identifier from a sqlglot Table expression."""
-
-    name = table.name
-    database = table.db or ""
-    alias = table.alias_or_name
-    return {
-        "type": "table",
-        "name": f"{database}.{name}".strip("."),
-        "database": database,
-        "alias": alias if alias != name else "",
-    }
-
-
-def collect_sources(expression: exp.Expression) -> List[Dict[str, str]]:
-    """Collect table sources from an expression."""
-
-    sources: List[Dict[str, str]] = []
-    seen: set[Tuple[str, str, str]] = set()
-    for table in expression.find_all(exp.Table):
-        info = table_identifier(table)
-        key = (info["name"], info.get("database", ""), info.get("alias", ""))
-        if key in seen:
-            continue
-        seen.add(key)
-        sources.append(info)
-    return sources
 
 
 def collect_joins(select: exp.Select, dialect: str) -> List[Dict[str, object]]:
@@ -44,7 +15,15 @@ def collect_joins(select: exp.Select, dialect: str) -> List[Dict[str, object]]:
         right = join.this
         right_entry: Optional[Dict[str, str]] = None
         if isinstance(right, exp.Table):
-            right_entry = table_identifier(right)
+            name = right.name
+            database = right.db or ""
+            alias = right.alias_or_name
+            right_entry = {
+                "type": "table",
+                "name": f"{database}.{name}".strip("."),
+                "database": database,
+                "alias": alias if alias != name else "",
+            }
         join_type = (join.args.get("kind") or "inner").lower()
         condition = ""
         if join.args.get("on") is not None:
