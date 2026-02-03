@@ -24,6 +24,14 @@ def collect_joins(select: exp.Select, dialect: str) -> List[Dict[str, object]]:
                 "database": database,
                 "alias": alias if alias != name else "",
             }
+        elif isinstance(right, exp.Subquery):
+            alias = right.alias_or_name
+            right_entry = {
+                "type": "subquery",
+                "name": alias or "",
+                "database": "",
+                "alias": alias or "",
+            }
         join_type = (join.args.get("kind") or "inner").lower()
         condition = ""
         if join.args.get("on") is not None:
